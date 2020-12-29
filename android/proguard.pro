@@ -1,0 +1,2 @@
+-keepnames class dev.cresc.modules.update.DownloadTask { *; }
+-keepnames class com.facebook.react.ReactInstanceManager { *; }
