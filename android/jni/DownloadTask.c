@@ -1,9 +1,9 @@
-#include "dev_cresc_module_update_DownloadTask.h"
+#include "dev_cresc_modules_update_DownloadTask.h"
 
 #include "hpatch.h"
 #define _check(v,errInfo) do{ if (!(v)) {  _isError=hpatch_TRUE; _errInfo=errInfo; goto _clear;  } }while(0)
 
-JNIEXPORT jbyteArray JNICALL Java_dev_cresc_module_update_DownloadTask_hdiffPatch
+JNIEXPORT jbyteArray JNICALL Java_dev_cresc_modules_update_DownloadTask_hdiffPatch
         (JNIEnv *env, jobject self, jbyteArray origin, jbyteArray patch){
     hpatch_BOOL  _isError=hpatch_FALSE; 
     const char* _errInfo="";
