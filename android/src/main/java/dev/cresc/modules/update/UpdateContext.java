@@ -69,10 +69,6 @@ public class UpdateContext {
         return context.getString(R.string.cresc_build_time);
     }
 
-    public String getUuid() {
-        return sp.getString("uuid", null);
-    }
-
     public Map getBlockUpdate() {
         return new HashMap<String, Object>() {{
             put("until", sp.getInt("blockUntil", 0));
