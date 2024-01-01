@@ -72,10 +72,14 @@ export type UpdateEventsListener = ({
   data: EventData;
 }) => void;
 
+export interface CrescServerConfig {
+  main: string;
+  backups?: string[];
+  queryUrl?: string;
+}
 export interface CrescOptions {
   appKey: string;
-  backupEndpoints?: string[];
-  backupQueryUrl?: string;
+  server?: CrescServerConfig;
   onEvents?: UpdateEventsListener;
   renderNewUpdatePrompt?: (data: any) => ReactNode;
   renderRollbackPrompt?: () => ReactNode;

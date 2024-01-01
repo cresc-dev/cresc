@@ -4,6 +4,6 @@ export function logger(...args: any[]) {
 
 export function assertRelease() {
   if (__DEV__) {
-    throw new Error('react-native-update 只能在 RELEASE 版本中运行.');
+    throw new Error('@cresc/core can only run in RELEASE mode.');
   }
 }
