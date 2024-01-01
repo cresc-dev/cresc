@@ -13,7 +13,6 @@ static NSString *const paramLastVersion = @"lastVersion";
 static NSString *const paramCurrentVersion = @"currentVersion";
 static NSString *const paramIsFirstTime = @"isFirstTime";
 static NSString *const paramIsFirstLoadOk = @"isFirstLoadOK";
-static NSString *const keyBlockUpdate = @"CRESC_BLOCKUPDATE";
 static NSString *const keyUuid = @"CRESC_UUID";
 static NSString *const keyHashInfo = @"CRESC_HASH_";
 static NSString *const keyFirstLoadMarked = @"CRESC_FIRSTLOADMARKED_KEY";
@@ -154,7 +153,6 @@ RCT_EXPORT_MODULE(RCTCresc);
     ret[@"buildTime"] = [RCTCresc buildTime];
     ret[@"rolledBackVersion"] = [defaults objectForKey:keyRolledBackMarked];
     ret[@"isFirstTime"] = [defaults objectForKey:keyFirstLoadMarked];
-    ret[@"blockUpdate"] = [defaults objectForKey:keyBlockUpdate];
     ret[@"uuid"] = [defaults objectForKey:keyUuid];
     NSDictionary *crescInfo = [defaults dictionaryForKey:keyCrescInfo];
     ret[@"currentVersion"] = [crescInfo objectForKey:paramCurrentVersion];
@@ -187,16 +185,6 @@ RCT_EXPORT_MODULE(RCTCresc);
         _fileManager = [RCTCrescManager new];
     }
     return self;
-}
-
-RCT_EXPORT_METHOD(setBlockUpdate:(NSDictionary *)options)
-{
-    // NSMutableDictionary *blockUpdateInfo = [NSMutableDictionary new];
-    // blockUpdateInfo[@"reason"] = options[@"reason"];
-    // blockUpdateInfo[@"until"] = options[@"until"];
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    [defaults setObject:options forKey:keyBlockUpdate];
-    [defaults synchronize];
 }
 
 RCT_EXPORT_METHOD(setUuid:(NSString *)uuid)

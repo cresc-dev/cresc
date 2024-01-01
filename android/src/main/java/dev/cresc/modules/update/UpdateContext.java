@@ -69,13 +69,6 @@ public class UpdateContext {
         return context.getString(R.string.cresc_build_time);
     }
 
-    public Map getBlockUpdate() {
-        return new HashMap<String, Object>() {{
-            put("until", sp.getInt("blockUntil", 0));
-            put("reason", sp.getString("blockReason", null));
-        }};
-    }
-
     public boolean getIsUsingBundleUrl() {
         return isUsingBundleUrl;
     }
@@ -164,13 +157,6 @@ public class UpdateContext {
 
     public String getKv(String key) {
         return sp.getString(key, null);
-    }
-
-    public void setBlockUpdate(int until, String reason) {
-        SharedPreferences.Editor editor = sp.edit();
-        editor.putInt("blockUntil", until);
-        editor.putString("blockReason", reason);
-        editor.apply();
     }
 
     public String getCurrentVersion() {

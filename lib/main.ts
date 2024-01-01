@@ -24,11 +24,10 @@ export const downloadRootDir = CrescConstants.downloadRootDir;
 export const packageVersion = CrescConstants.packageVersion;
 export const currentVersion = CrescConstants.currentVersion;
 export const isFirstTime = CrescConstants.isFirstTime;
-const rolledBackVersion = CrescConstants.rolledBackVersion;
+export const rolledBackVersion = CrescConstants.rolledBackVersion;
 export const isRolledBack = typeof rolledBackVersion === 'string';
 
 export const buildTime = CrescConstants.buildTime;
-export const blockUpdate = CrescConstants.blockUpdate;
 let uuid = CrescConstants.uuid;
 
 if (Platform.OS === 'android' && !CrescConstants.isUsingBundleUrl) {
@@ -53,7 +52,7 @@ export async function getCurrentVersionInfo(): Promise<{
   return currentVersion ? (await getLocalHashInfo(currentVersion)) || {} : {};
 }
 
-const eventEmitter = new NativeEventEmitter(CrescModule);
+export const crescNativeEventEmitter = new NativeEventEmitter(CrescModule);
 
 if (!uuid) {
   uuid = require('nanoid/non-secure').nanoid();

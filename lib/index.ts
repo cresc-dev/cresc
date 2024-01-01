@@ -1,9 +1,24 @@
 import { ComponentType } from 'react';
-import { CheckResult, CrescOptions, ProgressData, UpdateAvailableResult, UpdateEventsListener } from './type';
+import {
+  CheckResult,
+  CrescOptions,
+  ProgressData,
+  UpdateAvailableResult,
+  UpdateEventsListener,
+} from './type';
 import { withUpdates } from './withUpdates';
 import { assertRelease, logger } from './utils';
 import { PermissionsAndroid, Platform } from 'react-native';
-import { CrescModule, report } from './main';
+import {
+  CrescModule,
+  buildTime,
+  cInfo,
+  crescNativeEventEmitter,
+  currentVersion,
+  packageVersion,
+  report,
+  rolledBackVersion,
+} from './main';
 
 export const defaultServer = {
   main: 'https://api.cresc.dev',
@@ -12,120 +27,7 @@ export const defaultServer = {
     'https://raw.githubusercontent.com/cresc-dev/cresc/main/endpoints.json',
 };
 
-let lastChecking;
 const empty = {};
-let lastResult: CheckResult;
-
-function checkOperation(
-  op: { type: string; reason: string; duration: number }[],
-) {
-  if (!Array.isArray(op)) {
-    return;
-  }
-  op.forEach((action) => {
-    if (action.type === 'block') {
-      blockUpdate = {
-        reason: action.reason,
-        until: Math.round((Date.now() + action.duration) / 1000),
-      };
-      CrescModule.setBlockUpdate(blockUpdate);
-    }
-  });
-}
-
-let downloadingThrottling = false;
-let downloadedHash: string;
-export async function downloadUpdate(
-  options: UpdateAvailableResult,
-  eventListeners?: {
-    onDownloadProgress?: (data: ProgressData) => void;
-  },
-) {
-  assertRelease();
-  if (!options.update) {
-    return;
-  }
-  if (rolledBackVersion === options.hash) {
-    logger(`rolledback hash ${rolledBackVersion}, ignored`);
-    return;
-  }
-  if (downloadedHash === options.hash) {
-    logger(`duplicated downloaded hash ${downloadedHash}, ignored`);
-    return downloadedHash;
-  }
-  if (downloadingThrottling) {
-    logger('repeated downloading, ignored');
-    return;
-  }
-  downloadingThrottling = true;
-  setTimeout(() => {
-    downloadingThrottling = false;
-  }, 3000);
-  let progressHandler;
-  if (eventListeners) {
-    if (eventListeners.onDownloadProgress) {
-      const downloadCallback = eventListeners.onDownloadProgress;
-      progressHandler = eventEmitter.addListener(
-        'RCTCrescDownloadProgress',
-        (progressData) => {
-          if (progressData.hash === options.hash) {
-            downloadCallback(progressData);
-          }
-        },
-      );
-    }
-  }
-  let succeeded = false;
-  report({ type: 'downloading' });
-  if (options.diffUrl) {
-    logger('downloading diff');
-    try {
-      await CrescModule.downloadPatchFromPpk({
-        updateUrl: options.diffUrl,
-        hash: options.hash,
-        originHash: currentVersion,
-      });
-      succeeded = true;
-    } catch (e) {
-      logger(`diff error: ${e.message}, try pdiff`);
-    }
-  }
-  if (!succeeded && options.pdiffUrl) {
-    logger('downloading pdiff');
-    try {
-      await CrescModule.downloadPatchFromPackage({
-        updateUrl: options.pdiffUrl,
-        hash: options.hash,
-      });
-      succeeded = true;
-    } catch (e) {
-      logger(`pdiff error: ${e.message}, try full patch`);
-    }
-  }
-  if (!succeeded && options.updateUrl) {
-    logger('downloading full patch');
-    try {
-      await CrescModule.downloadFullUpdate({
-        updateUrl: options.updateUrl,
-        hash: options.hash,
-      });
-      succeeded = true;
-    } catch (e) {
-      logger(`full patch error: ${e.message}`);
-    }
-  }
-  progressHandler && progressHandler.remove();
-  if (!succeeded) {
-    return report({ type: 'errorUpdate', data: { newVersion: options.hash } });
-  }
-  setLocalHashInfo(options.hash, {
-    name: options.name,
-    description: options.description,
-    metaInfo: options.metaInfo,
-  });
-  downloadedHash = options.hash;
-  return options.hash;
-}
 
 function assertHash(hash: string) {
   if (!downloadedHash) {
@@ -195,7 +97,7 @@ export async function downloadAndInstallApk({
   let hash = Date.now().toString();
   let progressHandler;
   if (onDownloadProgress) {
-    progressHandler = eventEmitter.addListener(
+    progressHandler = crescNativeEventEmitter.addListener(
       'RCTCrescDownloadProgress',
       (progressData: ProgressData) => {
         if (progressData.hash === hash) {
@@ -219,6 +121,13 @@ export class Cresc {
     appKey: '',
     server: defaultServer,
   };
+
+  lastChecking: number;
+  lastResult: CheckResult;
+
+  downloadingThrottling = false;
+  downloadedHash: string;
+
   constructor(options: CrescOptions) {
     for (const [key, value] of Object.entries(options)) {
       if (value !== undefined) {
@@ -235,22 +144,15 @@ export class Cresc {
   async checkUpdate() {
     assertRelease();
     const now = Date.now();
-    if (lastResult && lastChecking && now - lastChecking < 1000 * 60) {
+    if (
+      this.lastResult &&
+      this.lastChecking &&
+      now - this.lastChecking < 1000 * 5
+    ) {
       // logger('repeated checking, ignored');
-      return lastResult;
+      return this.lastResult;
     }
-    lastChecking = now;
-    if (blockUpdate && blockUpdate.until > Date.now() / 1000) {
-      report({
-        type: 'errorChecking',
-        message: `Cresc update service is paused because: ${
-          blockUpdate.reason
-        }. Please retry after ${new Date(
-          blockUpdate.until * 1000,
-        ).toLocaleString()}.`,
-      });
-      return lastResult || empty;
-    }
+    this.lastChecking = now;
     report({ type: 'checking' });
     const fetchPayload = {
       method: 'POST',
@@ -289,13 +191,11 @@ export class Cresc {
         type: 'errorChecking',
         message: 'Can not connect to update server. Please check your network.',
       });
-      return lastResult || empty;
+      return this.lastResult || empty;
     }
     const result: CheckResult = await resp.json();
 
-    lastResult = result;
-    // @ts-ignore
-    checkOperation(result.op);
+    this.lastResult = result;
 
     if (resp.status !== 200) {
       report({
@@ -330,5 +230,99 @@ export class Cresc {
       }
     }
     return this.options.server.backups;
+  }
+  async downloadUpdate(
+    options: UpdateAvailableResult,
+    eventListeners?: {
+      onDownloadProgress?: (data: ProgressData) => void;
+    },
+  ) {
+    assertRelease();
+    if (!options.update) {
+      return;
+    }
+    if (rolledBackVersion === options.hash) {
+      logger(`rolledback hash ${rolledBackVersion}, ignored`);
+      return;
+    }
+    if (downloadedHash === options.hash) {
+      logger(`duplicated downloaded hash ${downloadedHash}, ignored`);
+      return downloadedHash;
+    }
+    if (downloadingThrottling) {
+      logger('repeated downloading, ignored');
+      return;
+    }
+    downloadingThrottling = true;
+    setTimeout(() => {
+      downloadingThrottling = false;
+    }, 3000);
+    let progressHandler;
+    if (eventListeners) {
+      if (eventListeners.onDownloadProgress) {
+        const downloadCallback = eventListeners.onDownloadProgress;
+        progressHandler = crescNativeEventEmitter.addListener(
+          'RCTCrescDownloadProgress',
+          (progressData) => {
+            if (progressData.hash === options.hash) {
+              downloadCallback(progressData);
+            }
+          },
+        );
+      }
+    }
+    let succeeded = false;
+    report({ type: 'downloading' });
+    if (options.diffUrl) {
+      logger('downloading diff');
+      try {
+        await CrescModule.downloadPatchFromPpk({
+          updateUrl: options.diffUrl,
+          hash: options.hash,
+          originHash: currentVersion,
+        });
+        succeeded = true;
+      } catch (e) {
+        logger(`diff error: ${e.message}, try pdiff`);
+      }
+    }
+    if (!succeeded && options.pdiffUrl) {
+      logger('downloading pdiff');
+      try {
+        await CrescModule.downloadPatchFromPackage({
+          updateUrl: options.pdiffUrl,
+          hash: options.hash,
+        });
+        succeeded = true;
+      } catch (e) {
+        logger(`pdiff error: ${e.message}, try full patch`);
+      }
+    }
+    if (!succeeded && options.updateUrl) {
+      logger('downloading full patch');
+      try {
+        await CrescModule.downloadFullUpdate({
+          updateUrl: options.updateUrl,
+          hash: options.hash,
+        });
+        succeeded = true;
+      } catch (e) {
+        logger(`full patch error: ${e.message}`);
+      }
+    }
+    progressHandler && progressHandler.remove();
+    if (!succeeded) {
+      return report({
+        type: 'errorUpdate',
+        data: { newVersion: options.hash },
+      });
+    }
+    setLocalHashInfo(options.hash, {
+      name: options.name,
+      description: options.description,
+      metaInfo: options.metaInfo,
+    });
+    downloadedHash = options.hash;
+    return options.hash;
   }
 }
