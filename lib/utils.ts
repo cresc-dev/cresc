@@ -1,4 +1,4 @@
-export function logger(...args: any[]) {
+export function log(...args: any[]) {
   console.log('cresc: ', ...args);
 }
 

@@ -32,7 +32,7 @@ export function withUpdates(
   }: CrescOptions,
 ) {
   if (!appKey) {
-    throw new Error('appKey is required for simpleUpdate()');
+    throw new Error('appKey is required for withUpdates()');
   }
   if (typeof eventListeners === 'function') {
     onCrescEvents(eventListeners);

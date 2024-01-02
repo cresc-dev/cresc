@@ -1,6 +1,6 @@
 import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
-import { EventType, UpdateEventsListener } from './type';
-import { logger } from './utils';
+import { EventType, UpdateEventsLogger } from './type';
+import { log } from './utils';
 const {
   version: v,
 } = require('react-native/Libraries/Core/ReactNativeVersion');
@@ -36,7 +36,7 @@ if (Platform.OS === 'android' && !CrescConstants.isUsingBundleUrl) {
   );
 }
 
-function setLocalHashInfo(hash: string, info: Record<string, any>) {
+export function setLocalHashInfo(hash: string, info: Record<string, any>) {
   CrescModule.setLocalHashInfo(hash, JSON.stringify(info));
 }
 
@@ -60,9 +60,9 @@ if (!uuid) {
 }
 
 const noop = () => {};
-let reporter: UpdateEventsListener = noop;
+let reporter: UpdateEventsLogger = noop;
 
-export function onCrescEvents(customReporter: UpdateEventsListener) {
+export function onCrescEvents(customReporter: UpdateEventsLogger) {
   reporter = customReporter;
   if (isRolledBack) {
     report({
@@ -83,7 +83,7 @@ export function report({
   message?: string;
   data?: Record<string, string | number>;
 }) {
-  logger(type + ' ' + message);
+  log(type + ' ' + message);
   reporter({
     type,
     data: {
@@ -97,7 +97,7 @@ export function report({
   });
 }
 
-logger('uuid: ' + uuid);
+log('uuid: ' + uuid);
 
 export const cInfo = {
   cresc: require('../package.json').version,

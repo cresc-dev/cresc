@@ -64,7 +64,7 @@ export interface EventData {
   newVersion?: string;
   [key: string]: any;
 }
-export type UpdateEventsListener = ({
+export type UpdateEventsLogger = ({
   type,
   data,
 }: {
@@ -80,9 +80,10 @@ export interface CrescServerConfig {
 export interface CrescOptions {
   appKey: string;
   server?: CrescServerConfig;
-  onEvents?: UpdateEventsListener;
+  logger?: UpdateEventsLogger;
   renderNewUpdatePrompt?: (data: any) => ReactNode;
   renderRollbackPrompt?: () => ReactNode;
   renderConfirmUpdatePrompt?: (data: any) => ReactNode;
   strategy?: 'onAppStart' | 'onAppResume' | 'both';
+  onDownloadProgress?: (data: ProgressData) => void;
 }

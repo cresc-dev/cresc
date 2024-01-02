@@ -4,10 +4,9 @@ import {
   CrescOptions,
   ProgressData,
   UpdateAvailableResult,
-  UpdateEventsListener,
 } from './type';
 import { withUpdates } from './withUpdates';
-import { assertRelease, logger } from './utils';
+import { assertRelease, log } from './utils';
 import { PermissionsAndroid, Platform } from 'react-native';
 import {
   CrescModule,
@@ -18,9 +17,10 @@ import {
   packageVersion,
   report,
   rolledBackVersion,
+  setLocalHashInfo,
 } from './main';
 
-export const defaultServer = {
+const defaultServer = {
   main: 'https://api.cresc.dev',
   backups: ['https://api.cresc.app'],
   queryUrl:
@@ -28,93 +28,6 @@ export const defaultServer = {
 };
 
 const empty = {};
-
-function assertHash(hash: string) {
-  if (!downloadedHash) {
-    logger(`no downloaded hash`);
-    return;
-  }
-  if (hash !== downloadedHash) {
-    logger(`use downloaded hash ${downloadedHash} first`);
-    return;
-  }
-  return true;
-}
-
-let applyingUpdate = false;
-export function switchVersion(hash: string) {
-  assertRelease();
-  if (assertHash(hash) && !applyingUpdate) {
-    logger('switchVersion: ' + hash);
-    applyingUpdate = true;
-    CrescModule.reloadUpdate({ hash });
-  }
-}
-
-export function switchVersionLater(hash: string) {
-  assertRelease();
-  if (assertHash(hash)) {
-    logger('switchVersionLater: ' + hash);
-    CrescModule.setNeedUpdate({ hash });
-  }
-}
-
-let marked = false;
-export function markSuccess() {
-  assertRelease();
-  if (marked) {
-    logger('repeated markSuccess, ignored');
-    return;
-  }
-  marked = true;
-  CrescModule.markSuccess();
-  report({ type: 'markSuccess' });
-}
-
-export async function downloadAndInstallApk({
-  url,
-  onDownloadProgress,
-}: {
-  url: string;
-  onDownloadProgress?: (data: ProgressData) => void;
-}) {
-  if (Platform.OS !== 'android') {
-    return;
-  }
-  report({ type: 'downloadingApk' });
-  if (Platform.Version <= 23) {
-    try {
-      const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-      );
-      if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-        return report({ type: 'rejectStoragePermission' });
-      }
-    } catch (err) {
-      return report({ type: 'errorStoragePermission' });
-    }
-  }
-  let hash = Date.now().toString();
-  let progressHandler;
-  if (onDownloadProgress) {
-    progressHandler = crescNativeEventEmitter.addListener(
-      'RCTCrescDownloadProgress',
-      (progressData: ProgressData) => {
-        if (progressData.hash === hash) {
-          onDownloadProgress(progressData);
-        }
-      },
-    );
-  }
-  await CrescModule.downloadAndInstallApk({
-    url,
-    target: 'update.apk',
-    hash,
-  }).catch(() => {
-    report({ type: 'errowDownloadAndInstallApk' });
-  });
-  progressHandler && progressHandler.remove();
-}
 
 export class Cresc {
   options: CrescOptions = {
@@ -127,6 +40,9 @@ export class Cresc {
 
   downloadingThrottling = false;
   downloadedHash: string;
+
+  marked = false;
+  applyingUpdate = false;
 
   constructor(options: CrescOptions) {
     for (const [key, value] of Object.entries(options)) {
@@ -141,6 +57,43 @@ export class Cresc {
   // get telemetryUrl() {
   //   return `${this.options.server!.main}/report`;
   // }
+  assertHash(hash: string) {
+    if (!this.downloadedHash) {
+      log(`no downloaded hash`);
+      return;
+    }
+    if (hash !== this.downloadedHash) {
+      log(`use downloaded hash ${this.downloadedHash} first`);
+      return;
+    }
+    return true;
+  }
+  markSuccess() {
+    assertRelease();
+    if (this.marked) {
+      log('repeated markSuccess, ignored');
+      return;
+    }
+    this.marked = true;
+    CrescModule.markSuccess();
+    report({ type: 'markSuccess' });
+  }
+  switchVersion(hash: string) {
+    assertRelease();
+    if (this.assertHash(hash) && !this.applyingUpdate) {
+      log('switchVersion: ' + hash);
+      this.applyingUpdate = true;
+      CrescModule.reloadUpdate({ hash });
+    }
+  }
+
+  switchVersionLater(hash: string) {
+    assertRelease();
+    if (this.assertHash(hash)) {
+      log('switchVersionLater: ' + hash);
+      CrescModule.setNeedUpdate({ hash });
+    }
+  }
   async checkUpdate() {
     assertRelease();
     const now = Date.now();
@@ -149,7 +102,7 @@ export class Cresc {
       this.lastChecking &&
       now - this.lastChecking < 1000 * 5
     ) {
-      // logger('repeated checking, ignored');
+      // log('repeated checking, ignored');
       return this.lastResult;
     }
     this.lastChecking = now;
@@ -219,110 +172,142 @@ export class Cresc {
       try {
         const resp = await fetch(queryUrl);
         const remoteEndpoints = await resp.json();
-        logger('fetch endpoints:', remoteEndpoints);
+        log('fetch endpoints:', remoteEndpoints);
         if (Array.isArray(remoteEndpoints)) {
           this.options.server.backups = Array.from(
             new Set([...backups, ...remoteEndpoints]),
           );
         }
       } catch (e) {
-        logger('failed to fetch endpoints from: ', queryUrl);
+        log('failed to fetch endpoints from: ', queryUrl);
       }
     }
     return this.options.server.backups;
   }
-  async downloadUpdate(
-    options: UpdateAvailableResult,
-    eventListeners?: {
-      onDownloadProgress?: (data: ProgressData) => void;
-    },
-  ) {
+  async downloadUpdate(info: UpdateAvailableResult) {
     assertRelease();
-    if (!options.update) {
+    if (!info.update) {
       return;
     }
-    if (rolledBackVersion === options.hash) {
-      logger(`rolledback hash ${rolledBackVersion}, ignored`);
+    if (rolledBackVersion === info.hash) {
+      log(`rolledback hash ${rolledBackVersion}, ignored`);
       return;
     }
-    if (downloadedHash === options.hash) {
-      logger(`duplicated downloaded hash ${downloadedHash}, ignored`);
-      return downloadedHash;
+    if (this.downloadedHash === info.hash) {
+      log(`duplicated downloaded hash ${this.downloadedHash}, ignored`);
+      return this.downloadedHash;
     }
-    if (downloadingThrottling) {
-      logger('repeated downloading, ignored');
+    if (this.downloadingThrottling) {
+      log('repeated downloading, ignored');
       return;
     }
-    downloadingThrottling = true;
+    this.downloadingThrottling = true;
     setTimeout(() => {
-      downloadingThrottling = false;
+      this.downloadingThrottling = false;
     }, 3000);
     let progressHandler;
-    if (eventListeners) {
-      if (eventListeners.onDownloadProgress) {
-        const downloadCallback = eventListeners.onDownloadProgress;
-        progressHandler = crescNativeEventEmitter.addListener(
-          'RCTCrescDownloadProgress',
-          (progressData) => {
-            if (progressData.hash === options.hash) {
-              downloadCallback(progressData);
-            }
-          },
-        );
-      }
+    if (this.options.onDownloadProgress) {
+      const downloadCallback = this.options.onDownloadProgress;
+      progressHandler = crescNativeEventEmitter.addListener(
+        'RCTCrescDownloadProgress',
+        (progressData) => {
+          if (progressData.hash === info.hash) {
+            downloadCallback(progressData);
+          }
+        },
+      );
     }
     let succeeded = false;
     report({ type: 'downloading' });
-    if (options.diffUrl) {
-      logger('downloading diff');
+    if (info.diffUrl) {
+      log('downloading diff');
       try {
         await CrescModule.downloadPatchFromPpk({
-          updateUrl: options.diffUrl,
-          hash: options.hash,
+          updateUrl: info.diffUrl,
+          hash: info.hash,
           originHash: currentVersion,
         });
         succeeded = true;
       } catch (e) {
-        logger(`diff error: ${e.message}, try pdiff`);
+        log(`diff error: ${e.message}, try pdiff`);
       }
     }
-    if (!succeeded && options.pdiffUrl) {
-      logger('downloading pdiff');
+    if (!succeeded && info.pdiffUrl) {
+      log('downloading pdiff');
       try {
         await CrescModule.downloadPatchFromPackage({
-          updateUrl: options.pdiffUrl,
-          hash: options.hash,
+          updateUrl: info.pdiffUrl,
+          hash: info.hash,
         });
         succeeded = true;
       } catch (e) {
-        logger(`pdiff error: ${e.message}, try full patch`);
+        log(`pdiff error: ${e.message}, try full patch`);
       }
     }
-    if (!succeeded && options.updateUrl) {
-      logger('downloading full patch');
+    if (!succeeded && info.updateUrl) {
+      log('downloading full patch');
       try {
         await CrescModule.downloadFullUpdate({
-          updateUrl: options.updateUrl,
-          hash: options.hash,
+          updateUrl: info.updateUrl,
+          hash: info.hash,
         });
         succeeded = true;
       } catch (e) {
-        logger(`full patch error: ${e.message}`);
+        log(`full patch error: ${e.message}`);
       }
     }
     progressHandler && progressHandler.remove();
     if (!succeeded) {
       return report({
         type: 'errorUpdate',
-        data: { newVersion: options.hash },
+        data: { newVersion: info.hash },
       });
     }
-    setLocalHashInfo(options.hash, {
-      name: options.name,
-      description: options.description,
-      metaInfo: options.metaInfo,
+    setLocalHashInfo(info.hash, {
+      name: info.name,
+      description: info.description,
+      metaInfo: info.metaInfo,
     });
-    downloadedHash = options.hash;
-    return options.hash;
+    this.downloadedHash = info.hash;
+    return info.hash;
+  }
+  async downloadAndInstallApk(url: string) {
+    if (Platform.OS !== 'android') {
+      return;
+    }
+    report({ type: 'downloadingApk' });
+    if (Platform.Version <= 23) {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          return report({ type: 'rejectStoragePermission' });
+        }
+      } catch (err) {
+        return report({ type: 'errorStoragePermission' });
+      }
+    }
+    let hash = Date.now().toString();
+    let progressHandler;
+    if (this.options.onDownloadProgress) {
+      const onDownloadProgress = this.options.onDownloadProgress;
+      progressHandler = crescNativeEventEmitter.addListener(
+        'RCTCrescDownloadProgress',
+        (progressData: ProgressData) => {
+          if (progressData.hash === hash) {
+            onDownloadProgress(progressData);
+          }
+        },
+      );
+    }
+    await CrescModule.downloadAndInstallApk({
+      url,
+      target: 'update.apk',
+      hash,
+    }).catch(() => {
+      report({ type: 'errowDownloadAndInstallApk' });
+    });
+    progressHandler && progressHandler.remove();
   }
 }
