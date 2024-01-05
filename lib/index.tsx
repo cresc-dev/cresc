@@ -1,19 +1,22 @@
-import { ComponentType } from 'react';
-import {
-  CheckResult,
-  CrescOptions,
-  ProgressData,
-  UpdateAvailableResult,
-} from './type';
-import { withUpdates } from './withUpdates';
+import React, { ComponentType, PureComponent } from 'react';
+import { CheckResult, CrescOptions, ProgressData } from './type';
 import { assertRelease, log } from './utils';
-import { PermissionsAndroid, Platform } from 'react-native';
+import {
+  Alert,
+  AppState,
+  Linking,
+  NativeEventSubscription,
+  PermissionsAndroid,
+  Platform,
+} from 'react-native';
 import {
   CrescModule,
   buildTime,
   cInfo,
   crescNativeEventEmitter,
   currentVersion,
+  isFirstTime,
+  isRolledBack,
   packageVersion,
   report,
   rolledBackVersion,
@@ -45,19 +48,22 @@ export class Cresc {
   applyingUpdate = false;
 
   constructor(options: CrescOptions) {
+    if (!options.appKey) {
+      throw new Error('appKey is required for withUpdates()');
+    }
     for (const [key, value] of Object.entries(options)) {
       if (value !== undefined) {
         this.options[key] = value;
       }
     }
   }
-  getCheckUrl(endpoint: string = this.options.server!.main) {
+  getCheckUrl = (endpoint: string = this.options.server!.main) => {
     return `${endpoint}/checkUpdate/${this.options.appKey}`;
-  }
+  };
   // get telemetryUrl() {
   //   return `${this.options.server!.main}/report`;
   // }
-  assertHash(hash: string) {
+  assertHash = (hash: string) => {
     if (!this.downloadedHash) {
       log(`no downloaded hash`);
       return;
@@ -67,8 +73,8 @@ export class Cresc {
       return;
     }
     return true;
-  }
-  markSuccess() {
+  };
+  markSuccess = () => {
     assertRelease();
     if (this.marked) {
       log('repeated markSuccess, ignored');
@@ -77,24 +83,24 @@ export class Cresc {
     this.marked = true;
     CrescModule.markSuccess();
     report({ type: 'markSuccess' });
-  }
-  switchVersion(hash: string) {
+  };
+  switchVersion = (hash: string) => {
     assertRelease();
     if (this.assertHash(hash) && !this.applyingUpdate) {
       log('switchVersion: ' + hash);
       this.applyingUpdate = true;
       CrescModule.reloadUpdate({ hash });
     }
-  }
+  };
 
-  switchVersionLater(hash: string) {
+  switchVersionLater = (hash: string) => {
     assertRelease();
     if (this.assertHash(hash)) {
       log('switchVersionLater: ' + hash);
       CrescModule.setNeedUpdate({ hash });
     }
-  }
-  async checkUpdate() {
+  };
+  checkUpdate = async () => {
     assertRelease();
     const now = Date.now();
     if (
@@ -159,34 +165,153 @@ export class Cresc {
     }
 
     return result;
-  }
-  withUpdates(component: ComponentType) {
-    return withUpdates(component, this.options);
-  }
-  async getBackupEndpoints() {
-    if (!this.options.server) {
+  };
+  withUpdates = (WrappedComponent: ComponentType) => {
+    const cresc = this;
+    const { strategy, renderRollbackPrompt } = this.options;
+    return __DEV__
+      ? WrappedComponent
+      : class CrescRoot extends PureComponent {
+          stateListener: NativeEventSubscription;
+          componentDidMount() {
+            if (isRolledBack && !renderRollbackPrompt) {
+              Alert.alert(
+                'Sorry',
+                'The update has been rolled back due to an error',
+              );
+            } else if (isFirstTime) {
+              cresc.markSuccess();
+            }
+            if (strategy === 'both' || strategy === 'onAppResume') {
+              this.stateListener = AppState.addEventListener(
+                'change',
+                (nextAppState) => {
+                  if (nextAppState === 'active') {
+                    this.checkUpdate();
+                  }
+                },
+              );
+            }
+            if (strategy === 'both' || strategy === 'onAppStart') {
+              this.checkUpdate();
+            }
+          }
+          componentWillUnmount() {
+            this.stateListener && this.stateListener.remove();
+          }
+          doUpdate = async (info) => {
+            try {
+              const hash = await cresc.downloadUpdate(info);
+              if (!hash) {
+                return;
+              }
+              this.stateListener && this.stateListener.remove();
+              
+              Alert.alert('Download complete', 'Do you want to apply the update now?', [
+                {
+                  text: 'Later',
+                  style: 'cancel',
+                  onPress: () => {
+                    cresc.switchVersionLater(hash);
+                  },
+                },
+                {
+                  text: 'Now',
+                  style: 'default',
+                  onPress: () => {
+                    cresc.switchVersion(hash);
+                  },
+                },
+              ]);
+            } catch (err) {
+              Alert.alert('Update failed', err.message);
+            }
+          };
+
+          checkUpdate = async () => {
+            let info;
+            try {
+              info = await cresc.checkUpdate();
+            } catch (err) {
+              Alert.alert('Update failed', err.message);
+              return;
+            }
+            if (info.expired) {
+              Alert.alert(
+                'Major update',
+                'A full update is required to continue using the app',
+                [
+                  {
+                    text: 'OK',
+                    onPress: () => {
+                      if (info.downloadUrl) {
+                        if (
+                          Platform.OS === 'android' &&
+                          info.downloadUrl.endsWith('.apk')
+                        ) {
+                          cresc.downloadAndInstallApk(info.downloadUrl);
+                        } else {
+                          Linking.openURL(info.downloadUrl);
+                        }
+                      }
+                    },
+                  },
+                ],
+              );
+            } else if (info.update) {
+              Alert.alert(
+                `Version ${info.name} available`,
+                `What's new\n
+                ${info.description}
+                `,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'OK',
+                    style: 'default',
+                    onPress: () => {
+                      this.doUpdate(info);
+                    },
+                  },
+                ],
+              );
+            }
+          };
+
+          render() {
+            return (
+              <>
+                <WrappedComponent {...this.props} />;
+                {isRolledBack && renderRollbackPrompt && renderRollbackPrompt()}
+              </>
+            );
+          }
+        };
+  };
+  getBackupEndpoints = async () => {
+    const { server } = this.options;
+    if (!server) {
       return [];
     }
-    const { backups = [], queryUrl } = this.options.server;
-    if (queryUrl) {
+    if (server.queryUrl) {
       try {
-        const resp = await fetch(queryUrl);
+        const resp = await fetch(server.queryUrl);
         const remoteEndpoints = await resp.json();
         log('fetch endpoints:', remoteEndpoints);
         if (Array.isArray(remoteEndpoints)) {
-          this.options.server.backups = Array.from(
-            new Set([...backups, ...remoteEndpoints]),
+          server.backups = Array.from(
+            new Set([...(server.backups || []), ...remoteEndpoints]),
           );
         }
       } catch (e) {
-        log('failed to fetch endpoints from: ', queryUrl);
+        log('failed to fetch endpoints from: ', server.queryUrl);
       }
     }
-    return this.options.server.backups;
-  }
-  async downloadUpdate(info: UpdateAvailableResult) {
+    return server.backups;
+  };
+  downloadUpdate = async (info: CheckResult) => {
     assertRelease();
-    if (!info.update) {
+    if (!('update' in info)) {
       return;
     }
     if (rolledBackVersion === info.hash) {
@@ -270,8 +395,8 @@ export class Cresc {
     });
     this.downloadedHash = info.hash;
     return info.hash;
-  }
-  async downloadAndInstallApk(url: string) {
+  };
+  downloadAndInstallApk = async (url: string) => {
     if (Platform.OS !== 'android') {
       return;
     }
@@ -309,5 +434,5 @@ export class Cresc {
       report({ type: 'errowDownloadAndInstallApk' });
     });
     progressHandler && progressHandler.remove();
-  }
+  };
 }
