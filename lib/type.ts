@@ -1,20 +1,17 @@
-import { ReactNode } from 'react';
+import React, { ReactNode } from 'react';
 
 export interface ExpiredResult {
-  upToDate?: false;
   expired: true;
   downloadUrl: string;
 }
 
 export interface UpTodateResult {
-  expired?: false;
   upToDate: true;
   paused?: 'app' | 'package';
 }
 
 export interface UpdateAvailableResult {
-  expired?: false;
-  upToDate?: false;
+  upToDate: false;
   update: true;
   name: string; // version name
   hash: string;
@@ -81,9 +78,12 @@ export interface CrescOptions {
   appKey: string;
   server?: CrescServerConfig;
   logger?: UpdateEventsLogger;
-  renderNewUpdatePrompt?: (data: any) => ReactNode;
-  renderRollbackPrompt?: () => ReactNode;
-  renderConfirmUpdatePrompt?: (data: any) => ReactNode;
+  renderUpdateUI?: (data: {
+    info: UpdateAvailableResult | ExpiredResult;
+    onClose: () => void;
+    progress?: ProgressData;
+  }) => ReactNode;
+  renderApplyUpdatePrompt?: (data: any) => ReactNode;
   strategy?: 'onAppStart' | 'onAppResume' | 'both';
-  onDownloadProgress?: (data: ProgressData) => void;
+  renderDownloadProgress?: (data: ProgressData) => ReactNode;
 }
