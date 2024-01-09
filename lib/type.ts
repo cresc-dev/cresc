@@ -78,12 +78,6 @@ export interface CrescOptions {
   appKey: string;
   server?: CrescServerConfig;
   logger?: UpdateEventsLogger;
-  renderUpdateUI?: (data: {
-    info: UpdateAvailableResult | ExpiredResult;
-    onClose: () => void;
-    progress?: ProgressData;
-  }) => ReactNode;
-  renderApplyUpdatePrompt?: (data: any) => ReactNode;
+  disableAlert?: boolean;
   strategy?: 'onAppStart' | 'onAppResume' | 'both';
-  renderDownloadProgress?: (data: ProgressData) => ReactNode;
 }

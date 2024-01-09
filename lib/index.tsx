@@ -1,5 +1,10 @@
-import React, { ComponentType, PureComponent } from 'react';
-import { CheckResult, CrescOptions, ProgressData, UpdateAvailableResult } from './type';
+import React, { ComponentType, PureComponent, createContext } from 'react';
+import {
+  CheckResult,
+  CrescOptions,
+  ProgressData,
+  UpdateAvailableResult,
+} from './type';
 import { assertRelease, log } from './utils';
 import {
   Alert,
@@ -31,6 +36,8 @@ const defaultServer = {
 
 const empty = {};
 
+export const crescContext = createContext();
+
 export class Cresc {
   options: CrescOptions = {
     appKey: '',
@@ -56,6 +63,7 @@ export class Cresc {
       }
     }
   }
+  
   getCheckUrl = (endpoint: string = this.options.server!.main) => {
     return `${endpoint}/checkUpdate/${this.options.appKey}`;
   };
@@ -167,10 +175,15 @@ export class Cresc {
   };
   withUpdates = (WrappedComponent: ComponentType) => {
     const cresc = this;
-    const { strategy } = this.options;
+    const { strategy, disableAlert } = this.options;
+    const showAlert = (...args: Parameters<typeof Alert.alert>) => {
+      if (!disableAlert) {
+        Alert.alert(...args);
+      }
+    };
     return __DEV__
-      ? WrappedComponent
-      : class CrescRoot extends PureComponent {
+      ? (props) => <WrappedComponent {...props} />
+      : class CrescApp extends PureComponent {
           stateListener: NativeEventSubscription;
           componentDidMount() {
             if (isFirstTime) {
@@ -200,8 +213,7 @@ export class Cresc {
                 return;
               }
               this.stateListener && this.stateListener.remove();
-
-              Alert.alert(
+              showAlert(
                 'Download complete',
                 'Do you want to apply the update now?',
                 [
@@ -222,7 +234,7 @@ export class Cresc {
                 ],
               );
             } catch (err) {
-              Alert.alert('Update failed', err.message);
+              showAlert('Failed to update', err.message);
             }
           };
 
@@ -231,14 +243,15 @@ export class Cresc {
             try {
               info = await cresc.checkUpdate();
             } catch (err) {
-              Alert.alert('Update failed', err.message);
+              showAlert('Failed to check update', err.message);
+
               return;
             }
             if ('expired' in info) {
               const { downloadUrl } = info;
-              Alert.alert(
+              showAlert(
                 'Major update',
-                'A full update is required to continue using the app',
+                'A full update is required to download and install to continue.',
                 [
                   {
                     text: 'OK',
@@ -258,11 +271,11 @@ export class Cresc {
                 ],
               );
             } else if ('update' in info) {
-              Alert.alert(
+              showAlert(
                 `Version ${info.name} available`,
                 `What's new\n
-                ${info.description}
-                `,
+                  ${info.description}
+                  `,
                 [
                   { text: 'Cancel', style: 'cancel' },
                   {
