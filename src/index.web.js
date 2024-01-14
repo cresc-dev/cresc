@@ -1,3 +1,5 @@
+import { Fragment } from 'react';
+
 const noop = () => {};
 export class Cresc {
   constructor() {
@@ -9,3 +11,7 @@ export class Cresc {
     });
   }
 }
+
+export { CrescContext, useCresc } from './context';
+
+export const CrescProvider = Fragment;

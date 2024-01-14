@@ -3,7 +3,7 @@
 .eslintrc
 .nvmrc
 .travis.yml
-Example
+example
 android/build
 .vscode
 

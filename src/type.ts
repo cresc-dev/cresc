@@ -1,5 +1,3 @@
-import React, { ReactNode } from 'react';
-
 export interface ExpiredResult {
   expired: true;
   downloadUrl: string;
@@ -81,4 +79,5 @@ export interface CrescOptions {
   useAlert?: boolean;
   strategy?: 'onAppStart' | 'onAppResume' | 'both';
   autoMarkSuccess?: boolean;
+  dismissErrorAfter?: number;
 }

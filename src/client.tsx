@@ -1,16 +1,7 @@
-import React, { ComponentType, PureComponent, createContext } from 'react';
-import {
-  CheckResult,
-  CrescOptions,
-  ProgressData,
-  UpdateAvailableResult,
-} from './type';
+import { CheckResult, CrescOptions, ProgressData } from './type';
 import { assertRelease, log } from './utils';
 import {
-  Alert,
-  AppState,
-  Linking,
-  NativeEventSubscription,
+  EmitterSubscription,
   PermissionsAndroid,
   Platform,
 } from 'react-native';
@@ -20,12 +11,11 @@ import {
   cInfo,
   crescNativeEventEmitter,
   currentVersion,
-  isFirstTime,
   packageVersion,
   report,
   rolledBackVersion,
   setLocalHashInfo,
-} from './main';
+} from './core';
 
 const defaultServer = {
   main: 'https://api.cresc.dev',
@@ -35,29 +25,6 @@ const defaultServer = {
 };
 
 const empty = {};
-const noop = () => {};
-
-export const crescContext = createContext<{
-  updateUrlForExpiredApp: string;
-  checkUpdate: () => Promise<CheckResult>;
-  switchVersion: (hash: string) => void;
-  switchVersionLater: (hash: string) => void;
-  progress?: ProgressData;
-  markSuccess: () => void;
-  updateInfo?: UpdateAvailableResult;
-  lastError?: Error;
-  dismissError: () => void;
-  dismissErrorAfter?: number;
-}>({
-  updateUrlForExpiredApp: '',
-  checkUpdate: () => Promise.resolve(empty),
-  switchVersion: noop,
-  switchVersionLater: noop,
-  markSuccess: noop,
-  dismissError: noop,
-  dismissErrorAfter: 5000,
-});
-
 export class Cresc {
   options: CrescOptions = {
     appKey: '',
@@ -69,7 +36,7 @@ export class Cresc {
   lastChecking: number;
   lastResult: CheckResult;
 
-  downloadingThrottling = false;
+  progressHandlers: Record<string, EmitterSubscription> = {};
   downloadedHash: string;
 
   marked = false;
@@ -89,12 +56,8 @@ export class Cresc {
   getCheckUrl = (endpoint: string = this.options.server!.main) => {
     return `${endpoint}/checkUpdate/${this.options.appKey}`;
   };
-  // get telemetryUrl() {
-  //   return `${this.options.server!.main}/report`;
-  // }
   assertHash = (hash: string) => {
     if (!this.downloadedHash) {
-      log(`no downloaded hash`);
       return;
     }
     if (hash !== this.downloadedHash) {
@@ -106,7 +69,6 @@ export class Cresc {
   markSuccess = () => {
     assertRelease();
     if (this.marked) {
-      log('repeated markSuccess, ignored');
       return;
     }
     this.marked = true;
@@ -137,7 +99,6 @@ export class Cresc {
       this.lastChecking &&
       now - this.lastChecking < 1000 * 5
     ) {
-      // log('repeated checking, ignored');
       return this.lastResult;
     }
     this.lastChecking = now;
@@ -195,128 +156,6 @@ export class Cresc {
 
     return result;
   };
-  withUpdates = (WrappedComponent: ComponentType) => {
-    const cresc = this;
-    const { strategy, useAlert } = this.options;
-    const showAlert = (...args: Parameters<typeof Alert.alert>) => {
-      if (useAlert) {
-        Alert.alert(...args);
-      }
-    };
-    return __DEV__
-      ? (props) => <WrappedComponent {...props} />
-      : class CrescApp extends PureComponent {
-          stateListener: NativeEventSubscription;
-          componentDidMount() {
-            if (isFirstTime) {
-              cresc.markSuccess();
-            }
-            if (strategy === 'both' || strategy === 'onAppResume') {
-              this.stateListener = AppState.addEventListener(
-                'change',
-                (nextAppState) => {
-                  if (nextAppState === 'active') {
-                    this.checkUpdate();
-                  }
-                },
-              );
-            }
-            if (strategy === 'both' || strategy === 'onAppStart') {
-              this.checkUpdate();
-            }
-          }
-          componentWillUnmount() {
-            this.stateListener && this.stateListener.remove();
-          }
-          doUpdate = async (info: UpdateAvailableResult) => {
-            try {
-              const hash = await cresc.downloadUpdate(info);
-              if (!hash) {
-                return;
-              }
-              this.stateListener && this.stateListener.remove();
-              showAlert(
-                'Download complete',
-                'Do you want to apply the update now?',
-                [
-                  {
-                    text: 'Later',
-                    style: 'cancel',
-                    onPress: () => {
-                      cresc.switchVersionLater(hash);
-                    },
-                  },
-                  {
-                    text: 'Now',
-                    style: 'default',
-                    onPress: () => {
-                      cresc.switchVersion(hash);
-                    },
-                  },
-                ],
-              );
-            } catch (err) {
-              showAlert('Failed to update', err.message);
-            }
-          };
-
-          checkUpdate = async () => {
-            let info: CheckResult;
-            try {
-              info = await cresc.checkUpdate();
-            } catch (err) {
-              showAlert('Failed to check update', err.message);
-
-              return;
-            }
-            if ('expired' in info) {
-              const { downloadUrl } = info;
-              showAlert(
-                'Major update',
-                'A full update is required to download and install to continue.',
-                [
-                  {
-                    text: 'OK',
-                    onPress: () => {
-                      if (downloadUrl) {
-                        if (
-                          Platform.OS === 'android' &&
-                          downloadUrl.endsWith('.apk')
-                        ) {
-                          cresc.downloadAndInstallApk(downloadUrl);
-                        } else {
-                          Linking.openURL(downloadUrl);
-                        }
-                      }
-                    },
-                  },
-                ],
-              );
-            } else if ('update' in info) {
-              showAlert(
-                `Version ${info.name} available`,
-                `What's new\n
-                  ${info.description}
-                  `,
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'OK',
-                    style: 'default',
-                    onPress: () => {
-                      this.doUpdate(info as UpdateAvailableResult);
-                    },
-                  },
-                ],
-              );
-            }
-          };
-
-          render() {
-            return <WrappedComponent {...this.props} />;
-          }
-        };
-  };
   getBackupEndpoints = async () => {
     const { server } = this.options;
     if (!server) {
@@ -346,28 +185,24 @@ export class Cresc {
     if (!('update' in info)) {
       return;
     }
-    if (rolledBackVersion === info.hash) {
+    const { hash, diffUrl, pdiffUrl, updateUrl, name, description, metaInfo } =
+      info;
+    if (rolledBackVersion === hash) {
       log(`rolledback hash ${rolledBackVersion}, ignored`);
       return;
     }
-    if (this.downloadedHash === info.hash) {
+    if (this.downloadedHash === hash) {
       log(`duplicated downloaded hash ${this.downloadedHash}, ignored`);
       return this.downloadedHash;
     }
-    if (this.downloadingThrottling) {
-      log('repeated downloading, ignored');
+    if (this.progressHandlers[hash]) {
       return;
     }
-    this.downloadingThrottling = true;
-    setTimeout(() => {
-      this.downloadingThrottling = false;
-    }, 3000);
-    let progressHandler;
     if (onDownloadProgress) {
-      progressHandler = crescNativeEventEmitter.addListener(
+      this.progressHandlers[hash] = crescNativeEventEmitter.addListener(
         'RCTCrescDownloadProgress',
         (progressData) => {
-          if (progressData.hash === info.hash) {
+          if (progressData.hash === hash) {
             onDownloadProgress(progressData);
           }
         },
@@ -375,12 +210,12 @@ export class Cresc {
     }
     let succeeded = false;
     report({ type: 'downloading' });
-    if (info.diffUrl) {
+    if (diffUrl) {
       log('downloading diff');
       try {
         await CrescModule.downloadPatchFromPpk({
-          updateUrl: info.diffUrl,
-          hash: info.hash,
+          updateUrl: diffUrl,
+          hash,
           originHash: currentVersion,
         });
         succeeded = true;
@@ -388,44 +223,47 @@ export class Cresc {
         log(`diff error: ${e.message}, try pdiff`);
       }
     }
-    if (!succeeded && info.pdiffUrl) {
+    if (!succeeded && pdiffUrl) {
       log('downloading pdiff');
       try {
         await CrescModule.downloadPatchFromPackage({
-          updateUrl: info.pdiffUrl,
-          hash: info.hash,
+          updateUrl: pdiffUrl,
+          hash,
         });
         succeeded = true;
       } catch (e) {
         log(`pdiff error: ${e.message}, try full patch`);
       }
     }
-    if (!succeeded && info.updateUrl) {
+    if (!succeeded && updateUrl) {
       log('downloading full patch');
       try {
         await CrescModule.downloadFullUpdate({
-          updateUrl: info.updateUrl,
-          hash: info.hash,
+          updateUrl: updateUrl,
+          hash,
         });
         succeeded = true;
       } catch (e) {
         log(`full patch error: ${e.message}`);
       }
     }
-    progressHandler && progressHandler.remove();
+    if (this.progressHandlers[hash]) {
+      this.progressHandlers[hash].remove();
+      delete this.progressHandlers[hash];
+    }
     if (!succeeded) {
       return report({
         type: 'errorUpdate',
-        data: { newVersion: info.hash },
+        data: { newVersion: hash },
       });
     }
-    setLocalHashInfo(info.hash, {
-      name: info.name,
-      description: info.description,
-      metaInfo: info.metaInfo,
+    setLocalHashInfo(hash, {
+      name,
+      description,
+      metaInfo,
     });
-    this.downloadedHash = info.hash;
-    return info.hash;
+    this.downloadedHash = hash;
+    return hash;
   };
   downloadAndInstallApk = async (
     url: string,
@@ -447,13 +285,12 @@ export class Cresc {
         return report({ type: 'errorStoragePermission' });
       }
     }
-    let hash = Date.now().toString();
-    let progressHandler;
+    const progressKey = 'downloadingApk';
     if (onDownloadProgress) {
-      progressHandler = crescNativeEventEmitter.addListener(
+      this.progressHandlers[progressKey] = crescNativeEventEmitter.addListener(
         'RCTCrescDownloadProgress',
         (progressData: ProgressData) => {
-          if (progressData.hash === hash) {
+          if (progressData.hash === progressKey) {
             onDownloadProgress(progressData);
           }
         },
@@ -462,10 +299,13 @@ export class Cresc {
     await CrescModule.downloadAndInstallApk({
       url,
       target: 'update.apk',
-      hash,
+      hash: progressKey,
     }).catch(() => {
       report({ type: 'errowDownloadAndInstallApk' });
     });
-    progressHandler && progressHandler.remove();
+    if (this.progressHandlers[progressKey]) {
+      this.progressHandlers[progressKey].remove();
+      delete this.progressHandlers[progressKey];
+    }
   };
 }
