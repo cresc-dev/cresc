@@ -78,6 +78,7 @@ export interface CrescOptions {
   appKey: string;
   server?: CrescServerConfig;
   logger?: UpdateEventsLogger;
-  disableAlert?: boolean;
+  useAlert?: boolean;
   strategy?: 'onAppStart' | 'onAppResume' | 'both';
+  autoMarkSuccess?: boolean;
 }

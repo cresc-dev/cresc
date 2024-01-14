@@ -35,13 +35,35 @@ const defaultServer = {
 };
 
 const empty = {};
+const noop = () => {};
 
-export const crescContext = createContext();
+export const crescContext = createContext<{
+  updateUrlForExpiredApp: string;
+  checkUpdate: () => Promise<CheckResult>;
+  switchVersion: (hash: string) => void;
+  switchVersionLater: (hash: string) => void;
+  progress?: ProgressData;
+  markSuccess: () => void;
+  updateInfo?: UpdateAvailableResult;
+  lastError?: Error;
+  dismissError: () => void;
+  dismissErrorAfter?: number;
+}>({
+  updateUrlForExpiredApp: '',
+  checkUpdate: () => Promise.resolve(empty),
+  switchVersion: noop,
+  switchVersionLater: noop,
+  markSuccess: noop,
+  dismissError: noop,
+  dismissErrorAfter: 5000,
+});
 
 export class Cresc {
   options: CrescOptions = {
     appKey: '',
     server: defaultServer,
+    autoMarkSuccess: true,
+    useAlert: true,
   };
 
   lastChecking: number;
@@ -63,7 +85,7 @@ export class Cresc {
       }
     }
   }
-  
+
   getCheckUrl = (endpoint: string = this.options.server!.main) => {
     return `${endpoint}/checkUpdate/${this.options.appKey}`;
   };
@@ -175,9 +197,9 @@ export class Cresc {
   };
   withUpdates = (WrappedComponent: ComponentType) => {
     const cresc = this;
-    const { strategy, disableAlert } = this.options;
+    const { strategy, useAlert } = this.options;
     const showAlert = (...args: Parameters<typeof Alert.alert>) => {
-      if (!disableAlert) {
+      if (useAlert) {
         Alert.alert(...args);
       }
     };
