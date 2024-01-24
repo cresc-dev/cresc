@@ -13,8 +13,8 @@ import {
   Linking,
 } from 'react-native';
 import { Cresc } from './client';
-import { isFirstTime } from './core';
-import { UpdateAvailableResult, CheckResult } from './type';
+import { currentVersion, isFirstTime, packageVersion } from './core';
+import { CheckResult } from './type';
 import { CrescContext } from './context';
 
 export const CrescProvider = ({
@@ -56,38 +56,37 @@ export const CrescProvider = ({
     }
   }, [client, updateInfo]);
 
-  const doUpdate = useCallback(
-    async (info: UpdateAvailableResult) => {
-      try {
-        const hash = await client.downloadUpdate(info);
-        if (!hash) {
-          return;
-        }
-        setUpdateInfo(info);
-        stateListener.current && stateListener.current.remove();
-        showAlert('Download complete', 'Do you want to apply the update now?', [
-          {
-            text: 'Later',
-            style: 'cancel',
-            onPress: () => {
-              client.switchVersionLater(hash);
-            },
-          },
-          {
-            text: 'Now',
-            style: 'default',
-            onPress: () => {
-              client.switchVersion(hash);
-            },
-          },
-        ]);
-      } catch (err) {
-        setLastError(err);
-        showAlert('Failed to update', err.message);
+  const downloadUpdate = useCallback(async () => {
+    if (!updateInfo || !('update' in updateInfo)) {
+      return;
+    }
+    try {
+      const hash = await client.downloadUpdate(updateInfo);
+      if (!hash) {
+        return;
       }
-    },
-    [client, showAlert],
-  );
+      stateListener.current && stateListener.current.remove();
+      showAlert('Download complete', 'Do you want to apply the update now?', [
+        {
+          text: 'Later',
+          style: 'cancel',
+          onPress: () => {
+            client.switchVersionLater(hash);
+          },
+        },
+        {
+          text: 'Now',
+          style: 'default',
+          onPress: () => {
+            client.switchVersion(hash);
+          },
+        },
+      ]);
+    } catch (err) {
+      setLastError(err);
+      showAlert('Failed to update', err.message);
+    }
+  }, [client, showAlert, updateInfo]);
 
   const checkUpdate = useCallback(async () => {
     let info: CheckResult;
@@ -98,9 +97,9 @@ export const CrescProvider = ({
       showAlert('Failed to check update', err.message);
       return;
     }
+    setUpdateInfo(info);
     if ('expired' in info) {
       const { downloadUrl } = info;
-      setUpdateInfo(info);
       showAlert(
         'Major update',
         'A full update is required to download and install to continue.',
@@ -131,13 +130,13 @@ export const CrescProvider = ({
             text: 'OK',
             style: 'default',
             onPress: () => {
-              doUpdate(info as UpdateAvailableResult);
+              downloadUpdate();
             },
           },
         ],
       );
     }
-  }, [client, doUpdate, showAlert]);
+  }, [client, downloadUpdate, showAlert]);
 
   const markSuccess = client.markSuccess;
 
@@ -181,6 +180,10 @@ export const CrescProvider = ({
         updateInfo,
         lastError,
         markSuccess,
+        client,
+        downloadUpdate,
+        packageVersion,
+        currentHash: currentVersion,
       }}
     >
       {children}
