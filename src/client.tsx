@@ -1,5 +1,5 @@
-import { CheckResult, CrescOptions, ProgressData } from './type';
-import { assertRelease, log } from './utils';
+import { CheckResult, CrescOptions, ProgressData, EventType } from './type';
+import { assertRelease, log, testUrls } from './utils';
 import {
   EmitterSubscription,
   PermissionsAndroid,
@@ -12,9 +12,9 @@ import {
   crescNativeEventEmitter,
   currentVersion,
   packageVersion,
-  report,
   rolledBackVersion,
   setLocalHashInfo,
+  isRolledBack,
 } from './core';
 
 const defaultServer = {
@@ -25,12 +25,16 @@ const defaultServer = {
 };
 
 const empty = {};
+const noop = () => {};
+
 export class Cresc {
   options: CrescOptions = {
     appKey: '',
     server: defaultServer,
     autoMarkSuccess: true,
     useAlert: true,
+    strategy: 'both',
+    logger: noop,
   };
 
   lastChecking: number;
@@ -54,8 +58,43 @@ export class Cresc {
     for (const [key, value] of Object.entries(options)) {
       if (value !== undefined) {
         this.options[key] = value;
+        if (key === 'logger') {
+          if (isRolledBack) {
+            this.report({
+              type: 'rollback',
+              data: {
+                rolledBackVersion,
+              },
+            });
+          }
+        }
       }
     }
+  };
+
+  report = ({
+    type,
+    message = '',
+    data = {},
+  }: {
+    type: EventType;
+    message?: string;
+    data?: Record<string, string | number>;
+  }) => {
+    log(type + ' ' + message);
+    const { logger = noop, appKey } = this.options;
+    logger({
+      type,
+      data: {
+        appKey,
+        currentVersion,
+        cInfo,
+        packageVersion,
+        buildTime,
+        message,
+        ...data,
+      },
+    });
   };
 
   getCheckUrl = (endpoint: string = this.options.server!.main) => {
@@ -78,7 +117,7 @@ export class Cresc {
     }
     this.marked = true;
     CrescModule.markSuccess();
-    report({ type: 'markSuccess' });
+    this.report({ type: 'markSuccess' });
   };
   switchVersion = (hash: string) => {
     assertRelease();
@@ -107,7 +146,7 @@ export class Cresc {
       return this.lastResult;
     }
     this.lastChecking = now;
-    report({ type: 'checking' });
+    this.report({ type: 'checking' });
     const fetchPayload = {
       method: 'POST',
       headers: {
@@ -125,7 +164,7 @@ export class Cresc {
     try {
       resp = await fetch(this.getCheckUrl(), fetchPayload);
     } catch (e) {
-      report({
+      this.report({
         type: 'errorChecking',
         message: 'Can not connect to update server. Trying backup endpoints.',
       });
@@ -141,7 +180,7 @@ export class Cresc {
       }
     }
     if (!resp) {
-      report({
+      this.report({
         type: 'errorChecking',
         message: 'Can not connect to update server. Please check your network.',
       });
@@ -152,9 +191,8 @@ export class Cresc {
     this.lastResult = result;
 
     if (resp.status !== 200) {
-      report({
+      this.report({
         type: 'errorChecking',
-        //@ts-ignore
         message: result.message,
       });
     }
@@ -187,11 +225,21 @@ export class Cresc {
     onDownloadProgress?: (data: ProgressData) => void,
   ) => {
     assertRelease();
-    if (!('update' in info)) {
+    const {
+      hash,
+      diffUrl: _diffUrl,
+      diffUrls,
+      pdiffUrl: _pdiffUrl,
+      pdiffUrls,
+      updateUrl: _updateUrl,
+      updateUrls,
+      name,
+      description,
+      metaInfo,
+    } = info;
+    if (!info.update || !hash) {
       return;
     }
-    const { hash, diffUrl, pdiffUrl, updateUrl, name, description, metaInfo } =
-      info;
     if (rolledBackVersion === hash) {
       log(`rolledback hash ${rolledBackVersion}, ignored`);
       return;
@@ -214,7 +262,8 @@ export class Cresc {
       );
     }
     let succeeded = false;
-    report({ type: 'downloading' });
+    this.report({ type: 'downloading' });
+    const diffUrl = (await testUrls(diffUrls)) || _diffUrl;
     if (diffUrl) {
       log('downloading diff');
       try {
@@ -228,6 +277,7 @@ export class Cresc {
         log(`diff error: ${e.message}, try pdiff`);
       }
     }
+    const pdiffUrl = (await testUrls(pdiffUrls)) || _pdiffUrl;
     if (!succeeded && pdiffUrl) {
       log('downloading pdiff');
       try {
@@ -240,6 +290,7 @@ export class Cresc {
         log(`pdiff error: ${e.message}, try full patch`);
       }
     }
+    const updateUrl = (await testUrls(updateUrls)) || _updateUrl;
     if (!succeeded && updateUrl) {
       log('downloading full patch');
       try {
@@ -257,11 +308,12 @@ export class Cresc {
       delete this.progressHandlers[hash];
     }
     if (!succeeded) {
-      return report({
+      return this.report({
         type: 'errorUpdate',
         data: { newVersion: hash },
       });
     }
+    log('downloaded hash:', hash);
     setLocalHashInfo(hash, {
       name,
       description,
@@ -277,17 +329,17 @@ export class Cresc {
     if (Platform.OS !== 'android') {
       return;
     }
-    report({ type: 'downloadingApk' });
+    this.report({ type: 'downloadingApk' });
     if (Platform.Version <= 23) {
       try {
         const granted = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
         );
         if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-          return report({ type: 'rejectStoragePermission' });
+          return this.report({ type: 'rejectStoragePermission' });
         }
       } catch (err) {
-        return report({ type: 'errorStoragePermission' });
+        return this.report({ type: 'errorStoragePermission' });
       }
     }
     const progressKey = 'downloadingApk';
@@ -306,7 +358,7 @@ export class Cresc {
       target: 'update.apk',
       hash: progressKey,
     }).catch(() => {
-      report({ type: 'errowDownloadAndInstallApk' });
+      this.report({ type: 'errowDownloadAndInstallApk' });
     });
     if (this.progressHandlers[progressKey]) {
       this.progressHandlers[progressKey].remove();

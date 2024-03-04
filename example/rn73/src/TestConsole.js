@@ -13,29 +13,29 @@ import {
   TouchableOpacity,
 } from 'react-native';
 
-import {PushyModule} from 'react-native-update';
+import {CrescModule} from '@cresc/core';
 const Hash = '9D5CE6EBA420717BE7E7D308B11F8207681B066C951D68F3994D19828F342474';
 const UUID = '00000000-0000-0000-0000-000000000000';
-const DownloadUrl =
-  'http://cos.pgyer.com/697913e94d7441f20c686e2b0996a1aa.apk?sign=7a8f11b1df82cba45c8ac30b1acec88c&t=1680404102&response-content-disposition=attachment%3Bfilename%3DtestHotupdate_1.0.apk';
 
+const CustomDialog = ({title, visible, onConfirm}) => {
+  if (!visible) {
+    return null;
+  }
 
-  const CustomDialog = ({title, visible, onConfirm}) => {
-    if (!visible) {
-      return null;
-    }
-  
-    return (
-      <View style={styles.overlay}>
-        <View style={styles.dialog}>
-          <Text style={styles.title}>{title}</Text>
-          <TouchableOpacity testID='done' style={styles.button} onLongPress={onConfirm}>
-            <Text style={styles.buttonText}>确认</Text>
-          </TouchableOpacity>
-        </View>
+  return (
+    <View style={styles.overlay}>
+      <View style={styles.dialog}>
+        <Text style={styles.title}>{title}</Text>
+        <TouchableOpacity
+          testID="done"
+          style={styles.button}
+          onLongPress={onConfirm}>
+          <Text style={styles.buttonText}>OK</Text>
+        </TouchableOpacity>
       </View>
-    );
-  };
+    </View>
+  );
+};
 export default function TestConsole({visible}) {
   const [text, setText] = useState('');
   const [running, setRunning] = useState(false);
@@ -132,9 +132,8 @@ export default function TestConsole({visible}) {
           testID={NativeTestMethod[i].name}
           onLongPress={() => {
             NativeTestMethod[i].invoke();
-          }}
-        >
-        <Text>{NativeTestMethod[i].name}</Text>
+          }}>
+          <Text>{NativeTestMethod[i].name}</Text>
         </TouchableOpacity>,
       );
     }
@@ -144,7 +143,7 @@ export default function TestConsole({visible}) {
   return (
     <Modal visible={visible}>
       <SafeAreaView style={{flex: 1, padding: 10}}>
-        <Text>调试Pushy方法（方法名，参数，值换行）</Text>
+        <Text>Debug Cresc Functions(function names, parameters, values)</Text>
         <TextInput
           autoCorrect={false}
           autoCapitalize="none"
@@ -164,8 +163,14 @@ export default function TestConsole({visible}) {
         />
         {running && <ActivityIndicator />}
         <TouchableOpacity
-        style={{backgroundColor:'rgb(0,140,237)', justifyContent: 'center',
-        alignItems: 'center',paddingTop:10,paddingBottom:10,marginBottom:5}}
+          style={{
+            backgroundColor: 'rgb(0,140,237)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingTop: 10,
+            paddingBottom: 10,
+            marginBottom: 5,
+          }}
           testID="submit"
           onLongPress={async () => {
             setRunning(true);
@@ -175,9 +180,9 @@ export default function TestConsole({visible}) {
               let params = [];
               if (inputs.length === 1) {
                 if (options) {
-                  await PushyModule[methodName](options);
+                  await CrescModule[methodName](options);
                 } else {
-                  await PushyModule[methodName]();
+                  await CrescModule[methodName]();
                 }
               } else {
                 if (inputs.length === 2) {
@@ -186,7 +191,7 @@ export default function TestConsole({visible}) {
                   params = [inputs[1], inputs[2]];
                   console.log({inputs, params});
                 }
-                await PushyModule[methodName](...params);
+                await CrescModule[methodName](...params);
               }
               setAlertVisible(true);
               setAlertMsg('done');
@@ -195,17 +200,18 @@ export default function TestConsole({visible}) {
               setAlertMsg(e.message);
             }
             setRunning(false);
-          }}
-        >
-          <Text style={{color:'white'}}>执行</Text>
+          }}>
+          <Text style={{color: 'white'}}>Execute</Text>
         </TouchableOpacity>
-         <Button title="重置" onPress={() => setText('')} />
-          {renderTestView()}
-          <CustomDialog
-            title={alertMsg}
-            visible={alertVisible}
-            onConfirm={()=>{setAlertVisible(false)}}
-      />
+        <Button title="Reset" onPress={() => setText('')} />
+        {renderTestView()}
+        <CustomDialog
+          title={alertMsg}
+          visible={alertVisible}
+          onConfirm={() => {
+            setAlertVisible(false);
+          }}
+        />
       </SafeAreaView>
     </Modal>
   );

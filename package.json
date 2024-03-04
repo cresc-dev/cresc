@@ -25,7 +25,7 @@
     "url": "https://github.com/cresc-dev/cresc/issues"
   },
   "peerDependencies": {
-    "react-native": ">=0.57.0"
+    "react-native": ">=0.59.0"
   },
   "homepage": "https://github.com/cresc-dev/cresc#readme",
   "dependencies": {

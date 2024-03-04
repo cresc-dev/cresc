@@ -2,27 +2,35 @@ import { createContext, useContext } from 'react';
 import { CheckResult, ProgressData } from './type';
 import { Cresc } from './client';
 
-const empty = {};
 const noop = () => {};
+const asyncNoop = () => Promise.resolve();
 
 export const defaultContext = {
-  checkUpdate: () => Promise.resolve(empty),
+  checkUpdate: asyncNoop,
   switchVersion: noop,
   switchVersionLater: noop,
   markSuccess: noop,
   dismissError: noop,
-  downloadUpdate: noop,
+  downloadUpdate: asyncNoop,
+  downloadAndInstallApk: asyncNoop,
+  getCurrentVersionInfo: () => Promise.resolve({}),
   currentHash: '',
   packageVersion: '',
 };
 
 export const CrescContext = createContext<{
-  checkUpdate: () => void;
+  checkUpdate: () => Promise<void>;
   switchVersion: () => void;
   switchVersionLater: () => void;
   markSuccess: () => void;
   dismissError: () => void;
-  downloadUpdate: () => void;
+  downloadUpdate: () => Promise<void>;
+  downloadAndInstallApk: (url: string) => Promise<void>;
+  getCurrentVersionInfo: () => Promise<{
+    name?: string;
+    description?: string;
+    metaInfo?: string;
+  }>;
   currentHash: string;
   packageVersion: string;
   client?: Cresc;

@@ -13,8 +13,13 @@ import {
   Linking,
 } from 'react-native';
 import { Cresc } from './client';
-import { currentVersion, isFirstTime, packageVersion } from './core';
-import { CheckResult } from './type';
+import {
+  currentVersion,
+  isFirstTime,
+  packageVersion,
+  getCurrentVersionInfo,
+} from './core';
+import { CheckResult, ProgressData } from './type';
 import { CrescContext } from './context';
 
 export const CrescProvider = ({
@@ -24,44 +29,43 @@ export const CrescProvider = ({
   client: Cresc;
   children: ReactNode;
 }) => {
-  const { strategy, useAlert } = client.options;
+  const { options } = client;
   const stateListener = useRef<NativeEventSubscription>();
   const [updateInfo, setUpdateInfo] = useState<CheckResult>();
+  const [progress, setProgress] = useState<ProgressData>();
   const [lastError, setLastError] = useState<Error>();
 
   const dismissError = useCallback(() => {
-    if (lastError) {
-      setLastError(undefined);
-    }
-  }, [lastError]);
+    setLastError(undefined);
+  }, []);
 
   const showAlert = useCallback(
     (...args: Parameters<typeof Alert.alert>) => {
-      if (useAlert) {
+      if (options.useAlert) {
         Alert.alert(...args);
       }
     },
-    [useAlert],
+    [options],
   );
 
   const switchVersion = useCallback(() => {
-    if (updateInfo && 'hash' in updateInfo) {
+    if (updateInfo && updateInfo.hash) {
       client.switchVersion(updateInfo.hash);
     }
   }, [client, updateInfo]);
 
   const switchVersionLater = useCallback(() => {
-    if (updateInfo && 'hash' in updateInfo) {
+    if (updateInfo && updateInfo.hash) {
       client.switchVersionLater(updateInfo.hash);
     }
   }, [client, updateInfo]);
 
   const downloadUpdate = useCallback(async () => {
-    if (!updateInfo || !('update' in updateInfo)) {
+    if (!updateInfo || !updateInfo.update) {
       return;
     }
     try {
-      const hash = await client.downloadUpdate(updateInfo);
+      const hash = await client.downloadUpdate(updateInfo, setProgress);
       if (!hash) {
         return;
       }
@@ -88,6 +92,15 @@ export const CrescProvider = ({
     }
   }, [client, showAlert, updateInfo]);
 
+  const downloadAndInstallApk = useCallback(
+    async (downloadUrl: string) => {
+      if (Platform.OS === 'android' && downloadUrl) {
+        await client.downloadAndInstallApk(downloadUrl, setProgress);
+      }
+    },
+    [client],
+  );
+
   const checkUpdate = useCallback(async () => {
     let info: CheckResult;
     try {
@@ -98,7 +111,7 @@ export const CrescProvider = ({
       return;
     }
     setUpdateInfo(info);
-    if ('expired' in info) {
+    if (info.expired) {
       const { downloadUrl } = info;
       showAlert(
         'Major update',
@@ -109,7 +122,7 @@ export const CrescProvider = ({
             onPress: () => {
               if (downloadUrl) {
                 if (Platform.OS === 'android' && downloadUrl.endsWith('.apk')) {
-                  client.downloadAndInstallApk(downloadUrl);
+                  downloadAndInstallApk(downloadUrl);
                 } else {
                   Linking.openURL(downloadUrl);
                 }
@@ -118,7 +131,7 @@ export const CrescProvider = ({
           },
         ],
       );
-    } else if ('update' in info) {
+    } else if (info.update) {
       showAlert(
         `Version ${info.name} available`,
         `What's new\n
@@ -136,12 +149,13 @@ export const CrescProvider = ({
         ],
       );
     }
-  }, [client, downloadUpdate, showAlert]);
+  }, [client, downloadAndInstallApk, downloadUpdate, showAlert]);
 
   const markSuccess = client.markSuccess;
 
   useEffect(() => {
-    if (isFirstTime) {
+    const { strategy, dismissErrorAfter, autoMarkSuccess } = options;
+    if (isFirstTime && autoMarkSuccess) {
       markSuccess();
     }
     if (strategy === 'both' || strategy === 'onAppResume') {
@@ -158,7 +172,6 @@ export const CrescProvider = ({
       checkUpdate();
     }
     let dismissErrorTimer: ReturnType<typeof setTimeout>;
-    const { dismissErrorAfter } = client.options;
     if (typeof dismissErrorAfter === 'number' && dismissErrorAfter > 0) {
       dismissErrorTimer = setTimeout(() => {
         dismissError();
@@ -168,7 +181,7 @@ export const CrescProvider = ({
       stateListener.current && stateListener.current.remove();
       clearTimeout(dismissErrorTimer);
     };
-  }, [checkUpdate, client.options, dismissError, markSuccess, strategy]);
+  }, [checkUpdate, options, dismissError, markSuccess]);
 
   return (
     <CrescContext.Provider
@@ -184,6 +197,9 @@ export const CrescProvider = ({
         downloadUpdate,
         packageVersion,
         currentHash: currentVersion,
+        progress,
+        downloadAndInstallApk,
+        getCurrentVersionInfo,
       }}
     >
       {children}

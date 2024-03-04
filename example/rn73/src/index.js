@@ -13,7 +13,7 @@ import {Icon, PaperProvider, Snackbar, Banner} from 'react-native-paper';
 import TestConsole from './TestConsole';
 
 import _updateConfig from '../update.json';
-import {PushyProvider, Pushy, usePushy} from 'react-native-update';
+import {CrescProvider, Cresc, useCresc} from 'react-native-update';
 const {appKey} = _updateConfig[Platform.OS];
 
 function App() {
@@ -27,30 +27,29 @@ function App() {
     packageVersion,
     currentHash,
     progress: {received, total} = {},
-  } = usePushy();
+  } = useCresc();
   const [useDefaultAlert, setUseDefaultAlert] = useState(true);
   const [showTestConsole, setShowTestConsole] = useState(false);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   const [showUpdateSnackbar, setShowUpdateSnackbar] = useState(false);
   const snackbarVisible =
-    showUpdateSnackbar &&
-    updateInfo &&
-    updateInfo.updateAvailable &&
-    !useDefaultAlert;
+    !useDefaultAlert && showUpdateSnackbar && updateInfo?.update;
+
   return (
     <View style={styles.container}>
-      <Text style={styles.welcome}>欢迎使用Pushy热更新服务</Text>
+      <Text style={styles.welcome}>Cresc Demo</Text>
       <View style={{flexDirection: 'row'}}>
         <Text>
-          {useDefaultAlert ? '当前使用' : '当前不使用'}默认的alert更新提示
+          {useDefaultAlert ? 'Use' : 'Do not use'} default alert dialog
         </Text>
         <Switch
           value={useDefaultAlert}
           onValueChange={v => {
             setUseDefaultAlert(v);
-            client.setOptions({
-              showAlert: v,
+            client?.setOptions({
+              useAlert: v,
             });
+            setShowUpdateSnackbar(!v);
           }}
         />
       </View>
@@ -60,17 +59,21 @@ function App() {
         style={styles.image}
       />
       <Text style={styles.instructions}>
-        这是版本一 {'\n'}
-        当前原生包版本号: {packageVersion}
+        Version 1 {'\n'}
+        Native package version: {packageVersion}
         {'\n'}
-        当前热更新版本Hash: {currentHash || '(空)'}
+        Current jsbundle hash: {currentHash || '(NA)'}
         {'\n'}
       </Text>
       <Text>
-        下载进度：{received} / {total}
+        Downloading: {received} / {total}
       </Text>
-      <TouchableOpacity onPress={checkUpdate}>
-        <Text style={styles.instructions}>点击这里检查更新</Text>
+      <TouchableOpacity
+        onPress={() => {
+          checkUpdate();
+          setShowUpdateSnackbar(true);
+        }}>
+        <Text style={styles.instructions}>Press here to check update</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -80,36 +83,39 @@ function App() {
           setShowTestConsole(true);
         }}>
         <Text style={styles.instructions}>
-          react-native-update版本：{client.version}
+          @cresc/core version:{client?.version}
         </Text>
       </TouchableOpacity>
       <TestConsole visible={showTestConsole} />
       {snackbarVisible && (
         <Snackbar
-          visible={true}
+          visible={snackbarVisible}
           onDismiss={() => {
             setShowUpdateSnackbar(false);
           }}
           action={{
-            label: '更新',
+            label: 'Download Update',
             onPress: async () => {
               setShowUpdateSnackbar(false);
               await downloadUpdate();
               setShowUpdateBanner(true);
             },
           }}>
-          <Text>有新版本({updateInfo.version})可用，是否更新？</Text>
+          <Text style={{color: 'white'}}>
+            New version({updateInfo.name}) available, update now?
+          </Text>
         </Snackbar>
       )}
       <Banner
+        style={{width: '100%', position: 'absolute', top: 0}}
         visible={showUpdateBanner}
         actions={[
           {
-            label: '立即重启',
+            label: 'Apply and Restart',
             onPress: switchVersion,
           },
           {
-            label: '下次再说',
+            label: 'Next time',
             onPress: () => {
               switchVersionLater();
               setShowUpdateBanner(false);
@@ -119,7 +125,7 @@ function App() {
         icon={({size}) => (
           <Icon name="checkcircleo" size={size} color="#00f" />
         )}>
-        更新已完成，是否立即重启？
+        Update downloaded, do you want to apply and restart now?
       </Banner>
     </View>
   );
@@ -145,17 +151,16 @@ const styles = StyleSheet.create({
   image: {},
 });
 
-const pushyClient = new Pushy({
+const crescClient = new Cresc({
   appKey,
-  showAlert: false,
 });
 
 export default function Root() {
   return (
-    <PushyProvider client={pushyClient}>
+    <CrescProvider client={crescClient}>
       <PaperProvider>
         <App />
       </PaperProvider>
-    </PushyProvider>
+    </CrescProvider>
   );
 }
