@@ -1,12 +1,13 @@
 {
   "name": "@cresc/core",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "react-native hot update",
   "react-native": "src/index.ts",
   "main": "src/index.web.js",
   "scripts": {
+    "prepack": "yarn submodule && yarn lint",
+    "lint": "eslint \"src/*.@(ts|tsx|js|jsx)\" && tsc --noEmit",
     "submodule": "git submodule update --init --recursive",
-    "test": "echo \"Error: no test specified\" && exit 1",
     "build-lib": "yarn submodule && $ANDROID_HOME/ndk/20.1.5948944/ndk-build NDK_PROJECT_PATH=android APP_BUILD_SCRIPT=android/jni/Android.mk NDK_APPLICATION_MK=android/jni/Application.mk NDK_LIBS_OUT=android/lib"
   },
   "repository": {
@@ -32,9 +33,15 @@
     "nanoid": "^3.3.3"
   },
   "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@react-native/babel-preset": "^0.73.21",
     "@react-native/eslint-config": "^0.73.2",
+    "@react-native/typescript-config": "^0.74.0",
+    "@types/jest": "^29.5.12",
     "@types/react": "^18.2.46",
-    "eslint": "^8.56.0",
+    "eslint": "^8.57.0",
+    "eslint-plugin-ft-flow": "^3.0.7",
+    "jest": "^29.7.0",
     "prettier": "^2",
     "react": "18.2.0",
     "react-native": "0.73",

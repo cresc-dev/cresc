@@ -86,7 +86,7 @@ export const CrescProvider = ({
           },
         },
       ]);
-    } catch (err) {
+    } catch (err: any) {
       setLastError(err);
       showAlert('Failed to update', err.message);
     }
@@ -105,7 +105,7 @@ export const CrescProvider = ({
     let info: CheckResult;
     try {
       info = await client.checkUpdate();
-    } catch (err) {
+    } catch (err: any) {
       setLastError(err);
       showAlert('Failed to check update', err.message);
       return;
@@ -154,6 +154,10 @@ export const CrescProvider = ({
   const markSuccess = client.markSuccess;
 
   useEffect(() => {
+    if (__DEV__) {
+      console.info('DEV env detected, skipping update check.');
+      return;
+    }
     const { strategy, dismissErrorAfter, autoMarkSuccess } = options;
     if (isFirstTime && autoMarkSuccess) {
       markSuccess();
@@ -161,7 +165,7 @@ export const CrescProvider = ({
     if (strategy === 'both' || strategy === 'onAppResume') {
       stateListener.current = AppState.addEventListener(
         'change',
-        (nextAppState) => {
+        nextAppState => {
           if (nextAppState === 'active') {
             checkUpdate();
           }
@@ -200,8 +204,7 @@ export const CrescProvider = ({
         progress,
         downloadAndInstallApk,
         getCurrentVersionInfo,
-      }}
-    >
+      }}>
       {children}
     </CrescContext.Provider>
   );

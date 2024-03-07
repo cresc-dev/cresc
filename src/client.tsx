@@ -37,11 +37,11 @@ export class Cresc {
     logger: noop,
   };
 
-  lastChecking: number;
-  lastResult: CheckResult;
+  lastChecking?: number;
+  lastRespJson?: Promise<any>;
 
   progressHandlers: Record<string, EmitterSubscription> = {};
-  downloadedHash: string;
+  downloadedHash?: string;
 
   marked = false;
   applyingUpdate = false;
@@ -57,6 +57,7 @@ export class Cresc {
   setOptions = (options: Partial<CrescOptions>) => {
     for (const [key, value] of Object.entries(options)) {
       if (value !== undefined) {
+        // @ts-expect-error
         this.options[key] = value;
         if (key === 'logger') {
           if (isRolledBack) {
@@ -139,11 +140,11 @@ export class Cresc {
     assertRelease();
     const now = Date.now();
     if (
-      this.lastResult &&
+      this.lastRespJson &&
       this.lastChecking &&
       now - this.lastChecking < 1000 * 5
     ) {
-      return this.lastResult;
+      return await this.lastRespJson;
     }
     this.lastChecking = now;
     this.report({ type: 'checking' });
@@ -172,7 +173,7 @@ export class Cresc {
       if (backupEndpoints) {
         try {
           resp = await Promise.race(
-            backupEndpoints.map((endpoint) =>
+            backupEndpoints.map(endpoint =>
               fetch(this.getCheckUrl(endpoint), fetchPayload),
             ),
           );
@@ -184,11 +185,10 @@ export class Cresc {
         type: 'errorChecking',
         message: 'Can not connect to update server. Please check your network.',
       });
-      return this.lastResult || empty;
+      return this.lastRespJson ? await this.lastRespJson : empty;
     }
-    const result: CheckResult = await resp.json();
-
-    this.lastResult = result;
+    this.lastRespJson = resp.json();
+    const result: CheckResult = await this.lastRespJson;
 
     if (resp.status !== 200) {
       this.report({
@@ -254,7 +254,7 @@ export class Cresc {
     if (onDownloadProgress) {
       this.progressHandlers[hash] = crescNativeEventEmitter.addListener(
         'RCTCrescDownloadProgress',
-        (progressData) => {
+        progressData => {
           if (progressData.hash === hash) {
             onDownloadProgress(progressData);
           }
@@ -273,7 +273,7 @@ export class Cresc {
           originHash: currentVersion,
         });
         succeeded = true;
-      } catch (e) {
+      } catch (e: any) {
         log(`diff error: ${e.message}, try pdiff`);
       }
     }
@@ -286,7 +286,7 @@ export class Cresc {
           hash,
         });
         succeeded = true;
-      } catch (e) {
+      } catch (e: any) {
         log(`pdiff error: ${e.message}, try full patch`);
       }
     }
@@ -299,7 +299,7 @@ export class Cresc {
           hash,
         });
         succeeded = true;
-      } catch (e) {
+      } catch (e: any) {
         log(`full patch error: ${e.message}`);
       }
     }

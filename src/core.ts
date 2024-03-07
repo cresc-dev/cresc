@@ -4,7 +4,9 @@ const {
   version: v,
 } = require('react-native/Libraries/Core/ReactNativeVersion');
 const RNVersion = `${v.major}.${v.minor}.${v.patch}`;
-const isTurboModuleEnabled = global.__turboModuleProxy != null;
+const isTurboModuleEnabled =
+  // @ts-ignore
+  global.__turboModuleProxy != null;
 
 export const CrescModule = isTurboModuleEnabled
   ? require('./turboModuleSpec').default

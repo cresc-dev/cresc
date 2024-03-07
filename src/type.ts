@@ -38,7 +38,7 @@ export type EventType =
 export interface EventData {
   currentVersion: string;
   cInfo: {
-    pushy: string;
+    cresc: string;
     rn: string;
     os: string;
     uuid: string;
