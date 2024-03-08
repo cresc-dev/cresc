@@ -34,6 +34,7 @@ export const CrescProvider = ({
   const [updateInfo, setUpdateInfo] = useState<CheckResult>();
   const [progress, setProgress] = useState<ProgressData>();
   const [lastError, setLastError] = useState<Error>();
+  const lastChecking = useRef<number>();
 
   const dismissError = useCallback(() => {
     setLastError(undefined);
@@ -102,6 +103,11 @@ export const CrescProvider = ({
   );
 
   const checkUpdate = useCallback(async () => {
+    const now = Date.now();
+    if (lastChecking.current && now - lastChecking.current < 1000) {
+      return;
+    }
+    lastChecking.current = now;
     let info: CheckResult;
     try {
       info = await client.checkUpdate();
