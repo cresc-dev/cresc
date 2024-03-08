@@ -32,6 +32,7 @@ export const CrescProvider = ({
   const { options } = client;
   const stateListener = useRef<NativeEventSubscription>();
   const [updateInfo, setUpdateInfo] = useState<CheckResult>();
+  const updateInfoRef = useRef(updateInfo);
   const [progress, setProgress] = useState<ProgressData>();
   const [lastError, setLastError] = useState<Error>();
   const lastChecking = useRef<number>();
@@ -61,37 +62,40 @@ export const CrescProvider = ({
     }
   }, [client, updateInfo]);
 
-  const downloadUpdate = useCallback(async () => {
-    if (!updateInfo || !updateInfo.update) {
-      return;
-    }
-    try {
-      const hash = await client.downloadUpdate(updateInfo, setProgress);
-      if (!hash) {
+  const downloadUpdate = useCallback(
+    async (info: CheckResult | undefined = updateInfoRef.current) => {
+      if (!info || !info.update) {
         return;
       }
-      stateListener.current && stateListener.current.remove();
-      showAlert('Download complete', 'Do you want to apply the update now?', [
-        {
-          text: 'Later',
-          style: 'cancel',
-          onPress: () => {
-            client.switchVersionLater(hash);
+      try {
+        const hash = await client.downloadUpdate(info, setProgress);
+        if (!hash) {
+          return;
+        }
+        stateListener.current && stateListener.current.remove();
+        showAlert('Download complete', 'Do you want to apply the update now?', [
+          {
+            text: 'Later',
+            style: 'cancel',
+            onPress: () => {
+              client.switchVersionLater(hash);
+            },
           },
-        },
-        {
-          text: 'Now',
-          style: 'default',
-          onPress: () => {
-            client.switchVersion(hash);
+          {
+            text: 'Now',
+            style: 'default',
+            onPress: () => {
+              client.switchVersion(hash);
+            },
           },
-        },
-      ]);
-    } catch (err: any) {
-      setLastError(err);
-      showAlert('Failed to update', err.message);
-    }
-  }, [client, showAlert, updateInfo]);
+        ]);
+      } catch (err: any) {
+        setLastError(err);
+        showAlert('Failed to update', err.message);
+      }
+    },
+    [client, showAlert],
+  );
 
   const downloadAndInstallApk = useCallback(
     async (downloadUrl: string) => {
