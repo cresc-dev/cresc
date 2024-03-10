@@ -5,9 +5,40 @@ def safeExtGet(prop, fallback) {
     rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
 }
 
+def isNewArchitectureEnabled() {
+    return project.hasProperty("newArchEnabled") && project.newArchEnabled == "true"
+}
+
+def supportsNamespace() {
+  def parsed = com.android.Version.ANDROID_GRADLE_PLUGIN_VERSION.tokenize('.')
+  def major = parsed[0].toInteger()
+  def minor = parsed[1].toInteger()
+
+  // Namespace support was added in 7.3.0
+  if (major == 7 && minor >= 3) {
+    return true
+  }
+
+  return major >= 8
+}
+
 apply plugin: 'com.android.library'
+if (isNewArchitectureEnabled()) {
+    apply plugin: 'com.facebook.react'
+}
+
 
 android {
+
+    if (supportsNamespace()) {
+        namespace "cn.reactnative.modules.update"
+
+        sourceSets {
+            main {
+                manifest.srcFile "src/main/AndroidManifestNew.xml"
+            }
+        }
+    }
     compileSdkVersion safeExtGet('compileSdkVersion', 28)
     buildToolsVersion safeExtGet('buildToolsVersion', '28.0.3')
 
@@ -17,11 +48,17 @@ android {
         versionCode 1
         versionName "1.0"
         consumerProguardFiles "proguard.pro"
+        buildConfigField "boolean", "IS_NEW_ARCHITECTURE_ENABLED", isNewArchitectureEnabled().toString()
     }
     sourceSets {
         main {
             // let gradle pack the shared library into apk
             jniLibs.srcDirs = ['./lib']
+            if (isNewArchitectureEnabled()) {
+                java.srcDirs += ['src/newarch']
+            } else {
+                java.srcDirs += ['src/oldarch']
+            }
         }
     }
 
@@ -44,4 +81,12 @@ repositories {
 
 dependencies {
     implementation 'com.facebook.react:react-native:+'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.13.0'
+}
+if (isNewArchitectureEnabled()) {
+    react {
+        jsRootDir = file("../lib/")
+        libraryName = "update"
+        codegenJavaPackageName = "dev.cresc.modules.update"
+    }
 }

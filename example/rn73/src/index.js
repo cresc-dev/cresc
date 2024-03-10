@@ -13,7 +13,7 @@ import {Icon, PaperProvider, Snackbar, Banner} from 'react-native-paper';
 import TestConsole from './TestConsole';
 
 import _updateConfig from '../update.json';
-import {CrescProvider, Cresc, useCresc} from 'react-native-update';
+import {CrescProvider, Cresc, useCresc} from '@cresc/core';
 const {appKey} = _updateConfig[Platform.OS];
 
 function App() {
