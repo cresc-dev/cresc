@@ -498,7 +498,7 @@ RCT_EXPORT_METHOD(markSuccess)
 
 - (NSError *)errorWithMessage:(NSString *)errorMessage
 {
-    return [NSError errorWithDomain:@"cn.reactnative.cresc"
+    return [NSError errorWithDomain:@"dev.cresc"
                                code:-1
                            userInfo:@{ NSLocalizedDescriptionKey: errorMessage}];
 }

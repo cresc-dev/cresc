@@ -31,7 +31,7 @@ if (isNewArchitectureEnabled()) {
 android {
 
     if (supportsNamespace()) {
-        namespace "cn.reactnative.modules.update"
+        namespace "dev.cresc.modules.update"
 
         sourceSets {
             main {

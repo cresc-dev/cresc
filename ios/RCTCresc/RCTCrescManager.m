@@ -10,7 +10,7 @@
 {
     self = [super init];
     if (self) {
-        _opQueue = dispatch_queue_create("cn.reactnative.cresc", DISPATCH_QUEUE_SERIAL);
+        _opQueue = dispatch_queue_create("dev.cresc", DISPATCH_QUEUE_SERIAL);
     }
     return self;
 }
