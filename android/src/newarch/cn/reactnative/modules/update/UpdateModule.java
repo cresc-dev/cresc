@@ -45,6 +45,7 @@ public class UpdateModule extends NativeUpdateSpec {
         if (rolledBackVersion != null) {
             updateContext.clearRollbackMark();
         }
+        constants.put("blockUpdate", updateContext.getBlockUpdate());
         constants.put("uuid", updateContext.getKv("uuid"));
         return constants;
     }
@@ -56,7 +57,7 @@ public class UpdateModule extends NativeUpdateSpec {
 
     @Override
     public void downloadFullUpdate(ReadableMap options, final Promise promise) {
-    UpdateModuleImpl.downloadFullUpdate(this.updateContext,options,promise);
+        UpdateModuleImpl.downloadFullUpdate(this.updateContext,options,promise);
     }
 
     @Override
@@ -105,6 +106,11 @@ public class UpdateModule extends NativeUpdateSpec {
     @Override
     public void markSuccess(Promise promise) {
         UpdateModuleImpl.markSuccess(updateContext,promise);
+    }
+
+    @Override
+    public void setBlockUpdate(ReadableMap options,Promise promise) {
+        UpdateModuleImpl.setBlockUpdate(updateContext,options,promise);
     }
 
     @Override
