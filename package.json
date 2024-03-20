@@ -25,6 +25,11 @@
   "bugs": {
     "url": "https://github.com/cresc-dev/cresc/issues"
   },
+  "codegenConfig": {
+    "name": "RCTCrescSpec",
+    "type": "modules",
+    "jsSrcsDir": "src"
+  },
   "peerDependencies": {
     "react-native": ">=0.59.0"
   },

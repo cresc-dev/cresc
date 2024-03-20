@@ -9,7 +9,7 @@ const isTurboModuleEnabled =
   global.__turboModuleProxy != null;
 
 export const CrescModule = isTurboModuleEnabled
-  ? require('./turboModuleSpec').default
+  ? require('./NativeCresc').default
   : NativeModules.Cresc;
 
 if (!CrescModule) {
