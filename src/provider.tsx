@@ -123,24 +123,24 @@ export const CrescProvider = ({
     setUpdateInfo(info);
     if (info.expired) {
       const { downloadUrl } = info;
-      showAlert(
-        'Major update',
-        'A full update is required to download and install to continue.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              if (downloadUrl) {
+      if (downloadUrl) {
+        showAlert(
+          'Major update',
+          'A full update is required to download and install to continue.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
                 if (Platform.OS === 'android' && downloadUrl.endsWith('.apk')) {
                   downloadAndInstallApk(downloadUrl);
                 } else {
                   Linking.openURL(downloadUrl);
                 }
-              }
+              },
             },
-          },
-        ],
-      );
+          ],
+        );
+      }
     } else if (info.update) {
       showAlert(
         `Version ${info.name} available`,
